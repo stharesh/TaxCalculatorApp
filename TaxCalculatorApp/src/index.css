@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-gray-900 antialiased;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+  }
+
+  * {
+    @apply transition-colors duration-150;
+  }
+
+  input[type="text"],
+  input[type="number"] {
+    @apply transition-shadow duration-150;
+  }
+
+  input[type="text"]:focus,
+  input[type="number"]:focus {
+    @apply ring-2 ring-indigo-500/20 ring-offset-0 border-indigo-500;
+  }
+}
+
+@layer components {
+  /* Card entrance animation */
+  .card-enter {
+    animation: cardEnter 0.2s ease-out forwards;
+  }
+
+  @keyframes cardEnter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Smooth conditional reveal */
+  .reveal {
+    animation: reveal 0.18s ease-out forwards;
+  }
+
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
