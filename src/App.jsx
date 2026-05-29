@@ -5,18 +5,20 @@ import S03_AgeGroup from './components/steps/S03_AgeGroup'
 import S04_SalaryDetails from './components/steps/S04_SalaryDetails'
 import S05_SalaryComponents from './components/steps/S05_SalaryComponents'
 import S06_OtherIncome from './components/steps/S06_OtherIncome'
-import S07_PaysRent from './components/steps/S07_PaysRent'
-import S08_RentDetails from './components/steps/S08_RentDetails'
-import S09_TaxSavingInvestments from './components/steps/S09_TaxSavingInvestments'
-import S10_HealthInsurance from './components/steps/S10_HealthInsurance'
-import S11_HomeLoan from './components/steps/S11_HomeLoan'
-import S12_TDS from './components/steps/S12_TDS'
-import S13_Calculating from './components/steps/S13_Calculating'
-import S14_Results from './components/steps/S14_Results'
+import S07_SideIncome from './components/steps/S07_SideIncome'
+import S08_CapitalGains from './components/steps/S08_CapitalGains'
+import S09_PaysRent from './components/steps/S09_PaysRent'
+import S10_RentDetails from './components/steps/S10_RentDetails'
+import S11_TaxSavingInvestments from './components/steps/S11_TaxSavingInvestments'
+import S12_HealthInsurance from './components/steps/S12_HealthInsurance'
+import S13_HomeLoan from './components/steps/S13_HomeLoan'
+import S14_TDS from './components/steps/S14_TDS'
+import S15_Calculating from './components/steps/S15_Calculating'
+import S16_Results from './components/steps/S16_Results'
 
 // Steps that count toward the visible progress bar (excludes landing, FY, animation, results)
 // Steps 3–12 = 10 input steps shown in progress
-const PROGRESS_STEPS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const PROGRESS_STEPS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 const TOTAL_PROGRESS = PROGRESS_STEPS.length
 
 export const INITIAL_STATE = {
@@ -35,6 +37,15 @@ export const INITIAL_STATE = {
   hasOtherIncome: null,
   fdInterest: '',
   savingsInterest: '',
+  hasSideIncome: null,
+  freelanceIncome: '',
+  businessIncome: '',
+  digitalIncome: '',
+  hasCapitalGains: null,
+  stcgEquity: '',
+  ltcgEquity: '',
+  stcgProperty: '',
+  ltcgProperty: '',
   paysRent: null,
   monthlyRent: '',
   cityType: null,            // 'metro' | 'nonMetro'
@@ -105,14 +116,16 @@ export default function App() {
       {step === 4  && <S04_SalaryDetails {...sharedProps} />}
       {step === 5  && <S05_SalaryComponents {...sharedProps} />}
       {step === 6  && <S06_OtherIncome {...sharedProps} />}
-      {step === 7  && <S07_PaysRent {...sharedProps} />}
-      {step === 8  && <S08_RentDetails {...sharedProps} />}
-      {step === 9  && <S09_TaxSavingInvestments {...sharedProps} />}
-      {step === 10 && <S10_HealthInsurance {...sharedProps} />}
-      {step === 11 && <S11_HomeLoan {...sharedProps} />}
-      {step === 12 && <S12_TDS {...sharedProps} />}
-      {step === 13 && <S13_Calculating {...sharedProps} setResults={setResults} />}
-      {step === 14 && <S14_Results {...sharedProps} results={results} reset={reset} />}
+      {step === 7  && <S07_SideIncome {...sharedProps} />}
+      {step === 8  && <S08_CapitalGains {...sharedProps} />}
+      {step === 9  && <S09_PaysRent {...sharedProps} />}
+      {step === 10  && <S10_RentDetails {...sharedProps} />}
+      {step === 11  && <S11_TaxSavingInvestments {...sharedProps} />}
+      {step === 12 && <S12_HealthInsurance {...sharedProps} />}
+      {step === 13 && <S13_HomeLoan {...sharedProps} />}
+      {step === 14 && <S14_TDS {...sharedProps} />}
+      {step === 15 && <S15_Calculating {...sharedProps} setResults={setResults} />}
+      {step === 16 && <S16_Results {...sharedProps} results={results} reset={reset} />}
     </div>
   )
 }

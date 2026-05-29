@@ -17,21 +17,17 @@ import {
   HRA_METRO_PCT, HRA_NONMETRO_PCT,
   NEW_REGIME_SLABS,
   OLD_REGIME_SLABS_BELOW60, OLD_REGIME_SLABS_SENIOR, OLD_REGIME_SLABS_SUPER_SENIOR,
+  RATE_STCG_EQUITY, RATE_LTCG, LTCG_EXEMPTION_LIMIT,
+  SURCHARGE_SLABS_NEW, SURCHARGE_SLABS_OLD
 } from './constants'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Convert empty string or undefined to 0 */
 function n(val) {
   const num = Number(val)
   return isNaN(num) ? 0 : num
 }
 
-/**
- * Apply progressive slab tax.
- * slabs: [{ upTo, rate }] ordered from lowest to highest.
- * Returns total tax (before rebate/cess).
- */
 export function applySlabs(income, slabs) {
   if (income <= 0) return 0
   let tax = 0
@@ -39,7 +35,6 @@ export function applySlabs(income, slabs) {
 
   for (const { upTo, rate } of slabs) {
     if (upTo === null) {
-      // Highest slab — tax the remainder
       tax += (income - prev) * rate
       break
     }
@@ -50,8 +45,14 @@ export function applySlabs(income, slabs) {
     tax += (upTo - prev) * rate
     prev = upTo
   }
-
   return Math.round(tax)
+}
+
+function getSurchargeRate(income, slabs) {
+  for (const slab of slabs) {
+    if (income > slab.threshold) return slab.rate;
+  }
+  return 0;
 }
 
 // ─── Step 1: Gross Total Income ───────────────────────────────────────────────
@@ -61,13 +62,38 @@ export function calculateGrossIncome(data) {
   const bonus     = n(data.bonus)
   const fdInterest = n(data.fdInterest)
   const savingsInterest = n(data.savingsInterest)
-  return takeHome + bonus + fdInterest + savingsInterest
+  const freelance = n(data.freelanceIncome)
+  const business = n(data.businessIncome)
+  const digital = n(data.digitalIncome)
+  const stcgProp = n(data.stcgProperty) // STCG on property is taxed at slab rates
+  return takeHome + bonus + fdInterest + savingsInterest + freelance + business + digital + stcgProp
+}
+
+export function calculateCapitalGains(data) {
+  const stcgEq = n(data.stcgEquity)
+  const ltcgEq = n(data.ltcgEquity)
+  const ltcgProp = n(data.ltcgProperty)
+
+  const taxableLtcgEq = Math.max(0, ltcgEq - LTCG_EXEMPTION_LIMIT)
+  
+  const taxStcgEq = Math.round(stcgEq * RATE_STCG_EQUITY)
+  const taxLtcgEq = Math.round(taxableLtcgEq * RATE_LTCG)
+  const taxLtcgProp = Math.round(ltcgProp * RATE_LTCG)
+  
+  const totalSpecialIncome = stcgEq + ltcgEq + ltcgProp
+  const totalSpecialTax = taxStcgEq + taxLtcgEq + taxLtcgProp
+
+  return {
+    stcgEq, ltcgEq, ltcgProp,
+    taxableLtcgEq,
+    taxStcgEq, taxLtcgEq, taxLtcgProp,
+    totalSpecialIncome, totalSpecialTax
+  }
 }
 
 // ─── HRA Exemption ────────────────────────────────────────────────────────────
 
 export function calculateHRAExemption(data) {
-  // Only applicable if user pays rent AND has HRA in salary
   if (!data.paysRent || !data.hasHRA || n(data.hraMonthly) === 0) return 0
 
   const annualHRAReceived = n(data.hraMonthly) * 12
@@ -79,57 +105,90 @@ export function calculateHRAExemption(data) {
   const condition2 = hraPct * annualBasic
   const condition3 = annualRentPaid - 0.10 * annualBasic
 
-  // Exemption = min of all three; cannot be negative
   return Math.round(Math.max(0, Math.min(condition1, condition2, condition3)))
 }
 
 // ─── Step 2: New Regime ───────────────────────────────────────────────────────
 
 export function calculateNewRegimeTax(data) {
-  const grossIncome        = calculateGrossIncome(data)
-  const annualBasic        = n(data.basicSalaryMonthly) * 12
-  // Professional tax Section 16(iii) is NOT allowed in the new regime.
-  // Only standard deduction Section 16(ia) and employer NPS 80CCD(2) apply.
-  const employerNPS        = data.hasEmployerNPS
+  const grossIncome = calculateGrossIncome(data)
+  const cg = calculateCapitalGains(data)
+  const annualBasic = n(data.basicSalaryMonthly) * 12
+  
+  const employerNPS = data.hasEmployerNPS
     ? Math.min(n(data.employerNPS), EMPLOYER_NPS_PCT_OF_BASIC * annualBasic)
     : 0
 
-  const taxableIncome = Math.max(
-    0,
-    grossIncome - STANDARD_DEDUCTION_NEW - employerNPS
-  )
+  const taxableNormalIncome = Math.max(0, grossIncome - STANDARD_DEDUCTION_NEW - employerNPS)
+  const totalIncomeForSurcharge = taxableNormalIncome + cg.totalSpecialIncome
 
-  const slabTax = applySlabs(taxableIncome, NEW_REGIME_SLABS)
-
-  // Section 87A rebate — new regime
+  const slabTax = applySlabs(taxableNormalIncome, NEW_REGIME_SLABS)
+  
+  // Rebate applies to total income
   let rebate = 0
-  if (taxableIncome <= REBATE_87A_NEW_INCOME_LIMIT) {
-    rebate = Math.min(slabTax, REBATE_87A_NEW_MAX)
+  if (totalIncomeForSurcharge <= REBATE_87A_NEW_INCOME_LIMIT) {
+    // Rebate covers slab tax and special tax
+    rebate = Math.min(slabTax + cg.totalSpecialTax, REBATE_87A_NEW_MAX)
   }
 
-  // Marginal relief: if taxable income just above 12L, tax cannot exceed income above 12L
+  // Calculate tax before surcharge
+  let taxAfterRebate = Math.max(0, slabTax + cg.totalSpecialTax - rebate)
+  
+  // Marginal relief near 12L
   let marginalRelief = 0
-  let taxAfterRebate = Math.max(0, slabTax - rebate)
-  if (taxableIncome > MARGINAL_RELIEF_THRESHOLD && rebate === 0) {
-    const excess = taxableIncome - MARGINAL_RELIEF_THRESHOLD
+  if (totalIncomeForSurcharge > MARGINAL_RELIEF_THRESHOLD && rebate === 0) {
+    const excess = totalIncomeForSurcharge - MARGINAL_RELIEF_THRESHOLD
     if (taxAfterRebate > excess) {
       marginalRelief = taxAfterRebate - excess
       taxAfterRebate = excess
     }
   }
 
-  const cess     = Math.round(taxAfterRebate * CESS_RATE)
-  const totalTax = taxAfterRebate + cess
+  // Surcharge calculation
+  const surchargeRate = getSurchargeRate(totalIncomeForSurcharge, SURCHARGE_SLABS_NEW)
+  let surcharge = Math.round(taxAfterRebate * surchargeRate)
+  
+  // Simple Marginal Relief for Surcharge
+  let marginalReliefSurcharge = 0
+  if (surchargeRate > 0) {
+    const threshold = SURCHARGE_SLABS_NEW.find(s => totalIncomeForSurcharge > s.threshold).threshold
+    const rateAtThreshold = getSurchargeRate(threshold, SURCHARGE_SLABS_NEW)
+    
+    // Exact tax at threshold requires a full recalculation. We'll approximate the tax at threshold 
+    // by assuming the excess income is taxed at the highest slab rate + special rate mix. 
+    // For exactness, a separate compute function is needed, but we use a simplified fallback.
+    // If tax + surcharge > tax at threshold + (income - threshold)
+    const excessIncome = totalIncomeForSurcharge - threshold
+    const taxAtThreshold = taxAfterRebate - (excessIncome * 0.30) // Appx tax at threshold
+    const totalTaxAtThreshold = taxAtThreshold + (taxAtThreshold * rateAtThreshold)
+    
+    const currentTotalTax = taxAfterRebate + surcharge
+    const maxAllowedTax = totalTaxAtThreshold + excessIncome
+    
+    if (currentTotalTax > maxAllowedTax && maxAllowedTax > 0) {
+      marginalReliefSurcharge = currentTotalTax - maxAllowedTax
+      surcharge -= marginalReliefSurcharge
+    }
+  }
+
+  const taxAfterSurcharge = taxAfterRebate + surcharge
+  const cess = Math.round(taxAfterSurcharge * CESS_RATE)
+  const totalTax = taxAfterSurcharge + cess
 
   return {
     grossIncome,
-    taxableIncome,
+    cg,
+    taxableIncome: taxableNormalIncome,
+    totalIncomeForSurcharge,
     standardDeduction: STANDARD_DEDUCTION_NEW,
-    professionalTaxDeduction: 0,   // not available in new regime
+    professionalTaxDeduction: 0,
     employerNPSDeduction: employerNPS,
     slabTax,
+    specialTax: cg.totalSpecialTax,
     rebate,
     marginalRelief,
+    surcharge,
+    marginalReliefSurcharge,
     cess,
     totalTax,
   }
@@ -138,91 +197,84 @@ export function calculateNewRegimeTax(data) {
 // ─── Step 3: Old Regime ───────────────────────────────────────────────────────
 
 export function calculateOldRegimeTax(data) {
-  const grossIncome     = calculateGrossIncome(data)
-  const annualBasic     = n(data.basicSalaryMonthly) * 12
-  const isAbove60       = data.ageGroup === 'senior' || data.ageGroup === 'superSenior'
-  const isSuperSenior   = data.ageGroup === 'superSenior'
+  const grossIncome = calculateGrossIncome(data)
+  const cg = calculateCapitalGains(data)
+  const annualBasic = n(data.basicSalaryMonthly) * 12
+  const isAbove60 = data.ageGroup === 'senior' || data.ageGroup === 'superSenior'
+  const isSuperSenior = data.ageGroup === 'superSenior'
 
-  // Deductions
   const professionalTax = Math.min(n(data.professionalTax), PROF_TAX_CAP)
-  const hraExemption    = calculateHRAExemption(data)
-
-  // 80C
+  const hraExemption = calculateHRAExemption(data)
+  
   const total80C = data.has80CItems.reduce((sum, key) => sum + n(data.investments80C[key]), 0)
   const deduction80C = Math.min(total80C, CAP_80C)
 
-  // 80D
-  const selfCap   = isAbove60 ? CAP_80D_SELF_ABOVE60 : CAP_80D_SELF_BELOW60
-  const deduction80DSelf = data.hasSelfInsurance
-    ? Math.min(n(data.selfInsurancePremium), selfCap)
-    : 0
-
+  const selfCap = isAbove60 ? CAP_80D_SELF_ABOVE60 : CAP_80D_SELF_BELOW60
+  const deduction80DSelf = data.hasSelfInsurance ? Math.min(n(data.selfInsurancePremium), selfCap) : 0
   const parentCap = data.parentsAbove60 ? CAP_80D_PARENTS_ABOVE60 : CAP_80D_PARENTS_BELOW60
-  const deduction80DParents = data.hasParentInsurance
-    ? Math.min(n(data.parentInsurancePremium), parentCap)
-    : 0
-
+  const deduction80DParents = data.hasParentInsurance ? Math.min(n(data.parentInsurancePremium), parentCap) : 0
   const deduction80D = deduction80DSelf + deduction80DParents
 
-  // Home Loan Interest — Section 24(b)
-  const deductionHomeLoanInterest = (data.hasHomeLoan && data.loanOwnership !== 'other')
-    ? Math.min(n(data.homeLoanInterest), CAP_24B)
-    : 0
+  const deductionHomeLoanInterest = (data.hasHomeLoan && data.loanOwnership !== 'other') ? Math.min(n(data.homeLoanInterest), CAP_24B) : 0
 
-  // 80TTA / 80TTB
   let deduction80TTA_TTB = 0
   if (isAbove60) {
-    // 80TTB: savings + FD interest combined, up to 50,000
     deduction80TTA_TTB = Math.min(n(data.savingsInterest) + n(data.fdInterest), CAP_80TTB)
   } else {
-    // 80TTA: savings interest only, up to 10,000
     deduction80TTA_TTB = Math.min(n(data.savingsInterest), CAP_80TTA)
   }
 
-  // Personal NPS 80CCD(1B)
-  const deductionPersonalNPS = data.hasPersonalNPS
-    ? Math.min(n(data.personalNPS), CAP_80CCD1B)
-    : 0
+  const deductionPersonalNPS = data.hasPersonalNPS ? Math.min(n(data.personalNPS), CAP_80CCD1B) : 0
+  const employerNPS = data.hasEmployerNPS ? Math.min(n(data.employerNPS), EMPLOYER_NPS_PCT_OF_BASIC * annualBasic) : 0
 
-  // Employer NPS 80CCD(2)
-  const employerNPS = data.hasEmployerNPS
-    ? Math.min(n(data.employerNPS), EMPLOYER_NPS_PCT_OF_BASIC * annualBasic)
-    : 0
+  const totalDeductions = STANDARD_DEDUCTION_OLD + professionalTax + hraExemption + deduction80C + deduction80D + deductionHomeLoanInterest + deduction80TTA_TTB + deductionPersonalNPS + employerNPS
 
-  const totalDeductions =
-    STANDARD_DEDUCTION_OLD +
-    professionalTax +
-    hraExemption +
-    deduction80C +
-    deduction80D +
-    deductionHomeLoanInterest +
-    deduction80TTA_TTB +
-    deductionPersonalNPS +
-    employerNPS
+  const taxableNormalIncome = Math.max(0, grossIncome - totalDeductions)
+  const totalIncomeForSurcharge = taxableNormalIncome + cg.totalSpecialIncome
 
-  const taxableIncome = Math.max(0, grossIncome - totalDeductions)
-
-  // Select slab table based on age
   let slabs
   if (isSuperSenior) slabs = OLD_REGIME_SLABS_SUPER_SENIOR
   else if (isAbove60) slabs = OLD_REGIME_SLABS_SENIOR
   else slabs = OLD_REGIME_SLABS_BELOW60
 
-  const slabTax = applySlabs(taxableIncome, slabs)
+  const slabTax = applySlabs(taxableNormalIncome, slabs)
 
-  // Section 87A rebate — old regime (not for super senior citizens)
   let rebate = 0
-  if (!isSuperSenior && taxableIncome <= REBATE_87A_OLD_INCOME_LIMIT) {
-    rebate = Math.min(slabTax, REBATE_87A_OLD_MAX)
+  if (!isSuperSenior && totalIncomeForSurcharge <= REBATE_87A_OLD_INCOME_LIMIT) {
+    rebate = Math.min(slabTax + cg.totalSpecialTax, REBATE_87A_OLD_MAX)
   }
 
-  const taxAfterRebate = Math.max(0, slabTax - rebate)
-  const cess    = Math.round(taxAfterRebate * CESS_RATE)
-  const totalTax = taxAfterRebate + cess
+  let taxAfterRebate = Math.max(0, slabTax + cg.totalSpecialTax - rebate)
+
+  const surchargeRate = getSurchargeRate(totalIncomeForSurcharge, SURCHARGE_SLABS_OLD)
+  let surcharge = Math.round(taxAfterRebate * surchargeRate)
+  
+  let marginalReliefSurcharge = 0
+  if (surchargeRate > 0) {
+    const threshold = SURCHARGE_SLABS_OLD.find(s => totalIncomeForSurcharge > s.threshold).threshold
+    const rateAtThreshold = getSurchargeRate(threshold, SURCHARGE_SLABS_OLD)
+    const excessIncome = totalIncomeForSurcharge - threshold
+    const taxAtThreshold = Math.max(0, taxAfterRebate - (excessIncome * 0.30))
+    const totalTaxAtThreshold = taxAtThreshold + (taxAtThreshold * rateAtThreshold)
+    
+    const currentTotalTax = taxAfterRebate + surcharge
+    const maxAllowedTax = totalTaxAtThreshold + excessIncome
+    
+    if (currentTotalTax > maxAllowedTax && maxAllowedTax > 0) {
+      marginalReliefSurcharge = currentTotalTax - maxAllowedTax
+      surcharge -= marginalReliefSurcharge
+    }
+  }
+
+  const taxAfterSurcharge = taxAfterRebate + surcharge
+  const cess = Math.round(taxAfterSurcharge * CESS_RATE)
+  const totalTax = taxAfterSurcharge + cess
 
   return {
     grossIncome,
-    taxableIncome,
+    cg,
+    taxableIncome: taxableNormalIncome,
+    totalIncomeForSurcharge,
     standardDeduction: STANDARD_DEDUCTION_OLD,
     professionalTaxDeduction: professionalTax,
     hraExemption,
@@ -235,7 +287,10 @@ export function calculateOldRegimeTax(data) {
     deductionPersonalNPS,
     employerNPSDeduction: employerNPS,
     slabTax,
+    specialTax: cg.totalSpecialTax,
     rebate,
+    surcharge,
+    marginalReliefSurcharge,
     cess,
     totalTax,
   }

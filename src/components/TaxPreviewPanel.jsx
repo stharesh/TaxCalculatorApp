@@ -86,7 +86,8 @@ const EMPTY_REGIME = {
   professionalTaxDeduction: 0, hraExemption: 0, deduction80C: 0,
   deduction80D: 0, deductionPersonalNPS: 0, employerNPSDeduction: 0,
   deductionHomeLoanInterest: 0, deduction80TTA_TTB: 0,
-  slabTax: 0, rebate: 0, marginalRelief: 0, cess: 0, totalTax: 0,
+  slabTax: 0, specialTax: 0, rebate: 0, marginalRelief: 0, surcharge: 0, marginalReliefSurcharge: 0, cess: 0, totalTax: 0,
+  cg: { totalSpecialIncome: 0 }
 }
 
 export default function TaxPreviewPanel({ data }) {
@@ -96,8 +97,16 @@ export default function TaxPreviewPanel({ data }) {
   const bonus = (data.hasBonus && Number(data.bonus) > 0) ? (Number(data.bonus) || 0) : 0
   const fdInterest = (data.hasOtherIncome && Number(data.fdInterest) > 0) ? (Number(data.fdInterest) || 0) : 0
   const savingsInterest = (data.hasOtherIncome && Number(data.savingsInterest) > 0) ? (Number(data.savingsInterest) || 0) : 0
+  
+  const freelance = (data.hasSideIncome && Number(data.freelanceIncome) > 0) ? Number(data.freelanceIncome) : 0
+  const business = (data.hasSideIncome && Number(data.businessIncome) > 0) ? Number(data.businessIncome) : 0
+  const digital = (data.hasSideIncome && Number(data.digitalIncome) > 0) ? Number(data.digitalIncome) : 0
+  const stcgEq = (data.hasCapitalGains && Number(data.stcgEquity) > 0) ? Number(data.stcgEquity) : 0
+  const ltcgEq = (data.hasCapitalGains && Number(data.ltcgEquity) > 0) ? Number(data.ltcgEquity) : 0
+  const stcgProp = (data.hasCapitalGains && Number(data.stcgProperty) > 0) ? Number(data.stcgProperty) : 0
+  const ltcgProp = (data.hasCapitalGains && Number(data.ltcgProperty) > 0) ? Number(data.ltcgProperty) : 0
 
-  const hasIncome = takeHomeSalary > 0
+  const hasIncome = takeHomeSalary > 0 || freelance > 0 || business > 0 || digital > 0 || stcgEq > 0 || ltcgEq > 0 || stcgProp > 0 || ltcgProp > 0
 
   let newRegimeData = { ...EMPTY_REGIME }
   let oldRegimeData = { ...EMPTY_REGIME }
@@ -205,8 +214,13 @@ export default function TaxPreviewPanel({ data }) {
                 {bonus > 0 && <LineRow label="Bonus / incentive" amount={fmt(bonus)} />}
                 {fdInterest > 0 && <LineRow label="FD interest" amount={fmt(fdInterest)} />}
                 {savingsInterest > 0 && <LineRow label="Savings account interest" amount={fmt(savingsInterest)} />}
+                {freelance > 0 && <LineRow label="Freelance income" amount={fmt(freelance)} />}
+                {business > 0 && <LineRow label="Business income" amount={fmt(business)} />}
+                {digital > 0 && <LineRow label="Digital income" amount={fmt(digital)} />}
+                {stcgProp > 0 && <LineRow label="STCG on Property" amount={fmt(stcgProp)} />}
+                {activeData.cg?.totalSpecialIncome > 0 && <LineRow label="Other Capital Gains" amount={fmt(activeData.cg.totalSpecialIncome)} />}
               </div>
-              <ResultBox label="Gross Income" amount={fmt(activeData.grossIncome || 0)} />
+              <ResultBox label="Total Income" amount={fmt((activeData.grossIncome || 0) + (activeData.cg?.totalSpecialIncome || 0))} />
             </div>
 
             {/* ── B: Deductions ── */}
@@ -249,7 +263,7 @@ export default function TaxPreviewPanel({ data }) {
                   </div>
                 )}
               </div>
-              <ResultBox label="Taxable Income" amount={fmt(activeData.taxableIncome)} indigo />
+              <ResultBox label="Taxable Normal Income" amount={fmt(activeData.taxableIncome)} indigo />
             </div>
 
             {/* ── C: Tax on Slabs ── */}
@@ -282,11 +296,20 @@ export default function TaxPreviewPanel({ data }) {
 
               {/* Adjustments */}
               <div className="space-y-0.5">
+                {activeData.specialTax > 0 && (
+                  <LineRow label="Capital Gains Tax (Special Rates)" amount={`+ ${fmt(activeData.specialTax)}`} />
+                )}
                 {activeData.rebate > 0 && (
                   <LineRow label="Section 87A rebate" amount={`− ${fmt(activeData.rebate)}`} green />
                 )}
                 {activeData.marginalRelief > 0 && (
                   <LineRow label="Marginal relief" amount={`− ${fmt(activeData.marginalRelief)}`} green />
+                )}
+                {activeData.surcharge > 0 && (
+                  <LineRow label="Surcharge" amount={`+ ${fmt(activeData.surcharge)}`} />
+                )}
+                {activeData.marginalReliefSurcharge > 0 && (
+                  <LineRow label="Marginal relief (Surcharge)" amount={`− ${fmt(activeData.marginalReliefSurcharge)}`} green />
                 )}
                 <LineRow
                   label="Health & Education Cess (4%)"

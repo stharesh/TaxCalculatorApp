@@ -32,7 +32,7 @@ export default function S07_PaysRent({ data, update, goNext, goBack, skipTo, res
     }
     if (data.paysRent === false) {
       // Skip S08 (Rent Details) entirely
-      skipTo(9)
+      skipTo(11)
     } else {
       goNext()  // → S08
     }

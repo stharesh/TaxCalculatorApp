@@ -144,8 +144,8 @@ export default function SectionC_DetailedBreakdown({ results, data }) {
 
   const isNewWinner = recommended === 'new'
 
-  const newTaxAfterRebate = Math.max(0, n.slabTax - n.rebate - (n.marginalRelief || 0))
-  const oldTaxAfterRebate = Math.max(0, o.slabTax - o.rebate)
+  const newTaxBeforeCess = Math.max(0, n.slabTax + (n.specialTax || 0) - n.rebate - (n.marginalRelief || 0)) + (n.surcharge || 0) - (n.marginalReliefSurcharge || 0)
+  const oldTaxBeforeCess = Math.max(0, o.slabTax + (o.specialTax || 0) - o.rebate) + (o.surcharge || 0) - (o.marginalReliefSurcharge || 0)
 
   const newSlabRows = computeSlabRows(n.taxableIncome, NEW_REGIME_SLABS)
   const oldSlabs = getOldSlabs(data?.ageGroup)
@@ -289,6 +289,13 @@ export default function SectionC_DetailedBreakdown({ results, data }) {
           </div>
 
           {/* ── Adjustments after slabs ── */}
+          {(n.specialTax > 0 || o.specialTax > 0) && (
+            <Row
+              label="Capital gains tax (special rates)"
+              newVal={n.specialTax > 0 ? `+ ${fmt(n.specialTax)}` : '₹0'}
+              oldVal={o.specialTax > 0 ? `+ ${fmt(o.specialTax)}` : '₹0'}
+            />
+          )}
           <Row
             label="Section 87A rebate (government relief)"
             newVal={n.rebate > 0 ? `− ${fmt(n.rebate)}` : '₹0'}
@@ -303,16 +310,31 @@ export default function SectionC_DetailedBreakdown({ results, data }) {
               deduction
             />
           )}
+          {(n.surcharge > 0 || o.surcharge > 0) && (
+            <Row
+              label="Surcharge"
+              newVal={n.surcharge > 0 ? `+ ${fmt(n.surcharge)}` : '₹0'}
+              oldVal={o.surcharge > 0 ? `+ ${fmt(o.surcharge)}` : '₹0'}
+            />
+          )}
+          {(n.marginalReliefSurcharge > 0 || o.marginalReliefSurcharge > 0) && (
+            <Row
+              label="Marginal relief (Surcharge)"
+              newVal={n.marginalReliefSurcharge > 0 ? `− ${fmt(n.marginalReliefSurcharge)}` : '₹0'}
+              oldVal={o.marginalReliefSurcharge > 0 ? `− ${fmt(o.marginalReliefSurcharge)}` : '₹0'}
+              deduction
+            />
+          )}
 
-          {/* Tax after rebate — shown when rebate wipes out tax in either regime */}
-          {(n.rebate > 0 || o.rebate > 0) && (
+          {/* Tax before cess — shown when adjustments wipe out tax in either regime */}
+          {(n.rebate > 0 || o.rebate > 0 || n.surcharge > 0 || o.surcharge > 0 || n.specialTax > 0 || o.specialTax > 0) && (
             <div className="flex">
-              <div className="flex-1 py-1.5 pr-3 text-xs text-gray-600 pl-7 font-medium">Tax after rebate</div>
-              <div className={`w-[27%] shrink-0 py-1.5 px-2 text-xs text-right font-semibold ${newTaxAfterRebate === 0 ? 'text-green-600' : 'text-gray-700'}`}>
-                {newTaxAfterRebate === 0 ? '₹0 — no tax' : fmt(newTaxAfterRebate)}
+              <div className="flex-1 py-1.5 pr-3 text-xs text-gray-600 pl-7 font-medium">Tax before cess</div>
+              <div className={`w-[27%] shrink-0 py-1.5 px-2 text-xs text-right font-semibold ${newTaxBeforeCess === 0 ? 'text-green-600' : 'text-gray-700'}`}>
+                {newTaxBeforeCess === 0 ? '₹0 — no tax' : fmt(newTaxBeforeCess)}
               </div>
-              <div className={`w-[27%] shrink-0 py-1.5 pl-2 text-xs text-right font-semibold ${oldTaxAfterRebate === 0 ? 'text-green-600' : 'text-gray-700'}`}>
-                {oldTaxAfterRebate === 0 ? '₹0 — no tax' : fmt(oldTaxAfterRebate)}
+              <div className={`w-[27%] shrink-0 py-1.5 pl-2 text-xs text-right font-semibold ${oldTaxBeforeCess === 0 ? 'text-green-600' : 'text-gray-700'}`}>
+                {oldTaxBeforeCess === 0 ? '₹0 — no tax' : fmt(oldTaxBeforeCess)}
               </div>
             </div>
           )}
@@ -322,11 +344,11 @@ export default function SectionC_DetailedBreakdown({ results, data }) {
             newVal={n.cess > 0 ? fmt(n.cess) : '₹0'}
             oldVal={o.cess > 0 ? fmt(o.cess) : '₹0'}
           />
-          {/* Explain why cess is zero when tax after rebate is zero */}
-          {(newTaxAfterRebate === 0 || oldTaxAfterRebate === 0) && (
+          {/* Explain why cess is zero when tax before cess is zero */}
+          {(newTaxBeforeCess === 0 || oldTaxBeforeCess === 0) && (
             <div className="pl-7 pb-1">
               <p className="text-xs text-gray-400 italic">
-                Cess is 4% of tax after rebate — when tax is zero, cess is also zero.
+                Cess is 4% of tax before cess — when tax is zero, cess is also zero.
               </p>
             </div>
           )}

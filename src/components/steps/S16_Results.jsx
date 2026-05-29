@@ -4,7 +4,34 @@ import SectionC_DetailedBreakdown from '../results/SectionC_DetailedBreakdown'
 import SectionD_Education from '../results/SectionD_Education'
 import SectionE_NextSteps from '../results/SectionE_NextSteps'
 
-export default function S14_Results({ results, data, reset, skipTo }) {
+import { useRef, useState } from 'react'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
+
+export default function S16_Results({ results, data, reset, skipTo }) {
+  const contentRef = useRef(null)
+  const [isExporting, setIsExporting] = useState(false)
+
+  async function handleDownloadPDF() {
+    if (!contentRef.current) return
+    setIsExporting(true)
+    try {
+      const canvas = await html2canvas(contentRef.current, { scale: 2, useCORS: true })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
+      
+      // If height is greater than one page, jsPDF handles it by squeezing or we just let it be a long single page.
+      // Usually, it's better to add new pages if it's too long, but for a simple export, scaling to width is fine.
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+      pdf.save('Tax_Calculation_FY2025_26.pdf')
+    } catch (err) {
+      console.error("PDF Export failed", err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
   if (!results) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -39,7 +66,7 @@ export default function S14_Results({ results, data, reset, skipTo }) {
       </div>
 
       {/* Two-column grid */}
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-4">
+      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-4 bg-[#FAFAFA]" ref={contentRef}>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
 
           {/* Left — verdict, next steps, education */}
@@ -52,8 +79,7 @@ export default function S14_Results({ results, data, reset, skipTo }) {
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5">
               <p className="text-xs text-amber-800 leading-relaxed">
                 <span className="font-semibold">Important disclaimer:</span> This is an estimate based on the information you provided — not exact tax advice.
-                Your actual tax may differ due to factors this calculator does not cover, such as surcharge (for incomes above ₹50 lakh),
-                capital gains, rental income, or other sources of income.
+                Your actual tax may differ due to factors this calculator does not cover, such as rental income or complex business deductions.
               </p>
               <p className="text-xs text-amber-800 leading-relaxed">
                 Always verify your numbers with a qualified Chartered Accountant or the official income tax portal
@@ -61,8 +87,19 @@ export default function S14_Results({ results, data, reset, skipTo }) {
               </p>
             </div>
 
-            {/* Edit / Start Over */}
-            <div className="flex flex-col items-center gap-2 pb-2">
+            {/* Edit / Start Over / PDF */}
+            <div className="flex flex-col items-center gap-2 pb-2 mt-4">
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                disabled={isExporting}
+                className="w-full sm:w-auto inline-flex justify-center items-center gap-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-xl px-6 py-3 shadow-sm disabled:opacity-70"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {isExporting ? 'Generating PDF...' : 'Download PDF'}
+              </button>
               <button
                 type="button"
                 onClick={() => skipTo(4)}

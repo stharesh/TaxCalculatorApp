@@ -130,7 +130,7 @@ export default function S09_TaxSavingInvestments({ data, update, goNext, goBack,
 
   function handleBack() {
     if (!data.paysRent) {
-      skipTo(7)
+      skipTo(9)
     } else {
       goBack()
     }

@@ -89,3 +89,25 @@ export const BASIC_EXEMPTION_OLD = {
   senior:      3_00_000,
   superSenior: 5_00_000,
 }
+
+// ─── Capital Gains Rates (FY 2025-26) ─────────────────────────────────────────
+export const RATE_STCG_EQUITY = 0.20
+export const RATE_LTCG = 0.125
+export const LTCG_EXEMPTION_LIMIT = 1_25_000
+
+// ─── Surcharge Slabs (FY 2025-26) ─────────────────────────────────────────────
+export const SURCHARGE_SLABS_NEW = [
+  { threshold: 2_00_00_000, rate: 0.25 },
+  { threshold: 1_00_00_000, rate: 0.15 },
+  { threshold: 50_00_000, rate: 0.10 },
+  { threshold: 0, rate: 0.00 },
+]
+
+export const SURCHARGE_SLABS_OLD = [
+  { threshold: 5_00_00_000, rate: 0.37 },
+  { threshold: 2_00_00_000, rate: 0.25 },
+  { threshold: 1_00_00_000, rate: 0.15 },
+  { threshold: 50_00_000, rate: 0.10 },
+  { threshold: 0, rate: 0.00 },
+]
+
